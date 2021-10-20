@@ -1,0 +1,134 @@
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.NullWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.io.Writable;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+
+
+class data1 implements Writable{
+
+    private String phonenum;//完整手机号码
+    private String weburl;//截取的网站URL
+    private int liuliang;//总流量，等于上行流量和下行流量之和
+    private String phonenumpart;//手机号码前七位，方便后期多表查询
+
+    public void write(DataOutput dataOutput) throws IOException {
+        //序列化：将java对象转化为可跨机器传输数据流（二进制串/字节）的一种技术
+
+        dataOutput.writeUTF(this.phonenum);
+        dataOutput.writeUTF(this.weburl);
+        dataOutput.writeInt(this.liuliang);
+        dataOutput.writeUTF(this.phonenumpart);
+    }
+
+    public void readFields(DataInput dataInput) throws IOException {
+        //反序列化：将可跨机器传输数据流（二进制串）转化为java对象的一种技术
+        this.phonenum=dataInput.readUTF();
+        this.weburl=dataInput.readUTF();
+        this.liuliang=dataInput.readInt();
+        this.phonenumpart=dataInput.readUTF();
+    }
+    public String getphonenum() {
+        return phonenum;
+    }
+    public void setphonenum(String phonenum) {
+        this.phonenum = phonenum;
+    }
+    public String getweburl() {
+        return weburl;
+    }
+    public void setweburl(String weburl) {
+        this.weburl = weburl;
+    }
+    public int getliuliang() {
+        return liuliang;
+    }
+    public void setliuliang(int liuliang) {
+        this.liuliang = liuliang;
+    }
+    public String getphonenumpart() {
+        return phonenumpart;
+    }
+    public void setphonenumpart(String phonenumpart) {
+        this.phonenumpart = phonenumpart;
+    }
+}
+
+class DMapper extends Mapper<LongWritable,Text,NullWritable,data1>{
+    protected void map(LongWritable key1, Text value1, Context context) throws IOException, InterruptedException {
+        String data=value1.toString();//获取一行数据
+        String web="";
+        String[] words=data.split("\t");//先通过“\t”把一行原数据分成长度为2的数组
+        String[] words2=words[1].split(" ");//把words[1]再次按照空格分成长度为3的数组
+        if(!words[0].contains("1")){//因为words[0]为手机号码，必包含数字1,所以判断收否包含1,是则继续，否则退出方法
+            return;
+
+        }
+        if (words2.length!=3){//因words数组如没有缺失值数组长度必然等于3,则判断是否长度等于3,是则继续执行，否则退出方法。
+            return;
+        }
+        //用上述两个判断就可以清除全部有缺失值的行，一行中只要存在一个缺失值，即不会被传递到reducer。
+        String part=words[0].substring(0,7);//截取手机号码前七位，方便后续多表连接
+        data1 oo=new data1();//创建数据流量对象
+        oo.setphonenumpart(part);//设置手机号码前七位
+        int index1= words2[0].indexOf("/");//找到URL中第一个“/”的位置
+        int index2= words2[0].indexOf("/",index1+5);//URL中第三个“/”的位置
+        if (index2==-1){//如果没有第三个“/”，则从第二个“/”之后一直截取到URL最后
+            web= words2[0].substring(index1+2);
+        }
+        else{//如果有，则截取第二个“/”到第三个“/”中间内容
+            web= words2[0].substring(index1+2,index2);
+        }
+
+        oo.setweburl(web);//设置URL
+        oo.setphonenum(words[0]);//设置完整手机号
+        int sum=Integer.parseInt(words2[1])+Integer.parseInt(words2[2]);//计算总流量
+        oo.setliuliang(sum);//设置总流量
+        context.write(NullWritable.get(),oo);//k2:NullWritable  v2：数据流量对象
+    }
+}
+
+class DReducer extends Reducer<NullWritable, data1,NullWritable,Text>{
+    protected void reduce(NullWritable k3, Iterable<data1> v3, Context context) throws IOException, InterruptedException {
+        for (data1 oo:v3){
+            //建立建表所需格式及数据
+            String shuchu=oo.getphonenum()+","+oo.getphonenumpart()+","+oo.getweburl()+","+oo.getliuliang();
+            context.write(NullWritable.get(),new Text(shuchu));//k4：NullWritable v4：TEXT 制表所需数据及格式
+        }
+
+    }
+
+}
+
+public class webdata1_main {
+    public static void main(String[] args) throws Exception {
+//1. 创建一个job和任务入口(指定主类)
+        Job job = Job.getInstance(new Configuration());
+        job.setJarByClass(webdata1_main.class);
+
+//2. 指定job的mapper和输出的类型<k2 v2>
+        job.setMapperClass(DMapper.class);
+        job.setMapOutputKeyClass(NullWritable.class);
+        job.setMapOutputValueClass(data1.class);
+
+        //3. 指定job的reducer和输出的类型<k4  v4>
+        job.setReducerClass(DReducer.class);
+        job.setOutputKeyClass(NullWritable.class);
+        job.setOutputValueClass(Text.class);
+
+        //4. 指定job的输入和输出路径
+        FileInputFormat.setInputPaths(job, new Path(args[0]));
+        FileOutputFormat.setOutputPath(job, new Path(args[1]));
+        //5. 执行job
+        job.waitForCompletion(true);
+    }
+}
