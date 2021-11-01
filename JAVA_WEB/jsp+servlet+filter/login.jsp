@@ -14,7 +14,7 @@
 <body>
 <h4>登录</h4>
 <hr>
-<form action="login_servlet" method="POST">
+<form action="login11.do" method="POST">
     用户名：<input type="text" name="username"/><br>
     密码  ：<input type="password" name="password"/><br>
             <input type="submit" >

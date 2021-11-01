@@ -1,14 +1,15 @@
 package test;
 
-import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServlet;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 
+import javax.servlet.ServletException;
+import javax.servlet.annotation.WebServlet;
+import javax.servlet.http.HttpServlet;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpSession;
 import java.io.IOException;
-import java.io.Writer;
 import java.sql.*;
-
+@WebServlet("/welcome")
 public class login_servlet extends HttpServlet {
 
     private static ResultSet rs = null;
@@ -26,26 +27,28 @@ public class login_servlet extends HttpServlet {
         initDB();
         String result = find(username, password);
         response.setHeader("Content-Type", "text/html; charset=UTF-8");
-        Writer writer = response.getWriter();
         if (result.equals("登陆成功")) {
-            writer.write(username+"登陆成功");
+            HttpSession session=request.getSession();
+            session.setAttribute("user", username);
+            response.sendRedirect("success.jsp");
         } else {
-            writer.write(username+"登录失败");
+            HttpSession session=request.getSession();
+            session.setAttribute("user", null);
+            response.sendRedirect("error.jsp");
         }
 
 
-        writer.flush();
-        writer.close();
+
     }
+
+
 
     //初始化数据库
     public void initDB() throws ServletException {
         try {
             //2.创建连接
-            connection = DriverManager.getConnection
-                    ("jdbc:mysql://localhost:3306/javaweb?useSSL=true&" +
-                            "characterEncoding=utf-8&user=" +
-                            "root&password=123456");//user为root，密码为1234
+
+            connection= DriverManager.getConnection("jdbc:mysql://localhost:3306/javaweb","root","123456");
             System.out.println("创建连接成功");
         } catch (Exception e) {
             e.printStackTrace();
